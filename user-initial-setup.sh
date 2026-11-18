@@ -57,7 +57,10 @@ pkg_install() {
                 DEBIAN_FRONTEND=noninteractive apt-get install -y "$@" ;;
         dnf)    dnf install -y "$@" ;;
         yum)    yum install -y "$@" ;;
-        zypper) zypper --non-interactive install "$@" ;;
+        zypper) # 102/103 = reboot/restart suggested, 106 = some repos skipped: not failures
+                local rc=0
+                zypper --non-interactive install "$@" || rc=$?
+                case $rc in 0|102|103|106) return 0 ;; *) return "$rc" ;; esac ;;
         pacman) pacman -Syu --noconfirm --needed "$@" ;;  # full upgrade; partial (-Sy) upgrades break Arch
         apk)    apk add --no-cache "$@" ;;
     esac
