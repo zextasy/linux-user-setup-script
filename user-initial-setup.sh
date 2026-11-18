@@ -46,16 +46,22 @@ echo "Detected ${PRETTY_NAME:-$ID} (family: $FAMILY)"
 if id "$USERNAME" &>/dev/null; then
     echo "User $USERNAME already exists, skipping creation."
 else
-    if [[ $FAMILY == debian ]]; then
-        adduser --disabled-password --gecos "" "$USERNAME"
-    else
-        useradd -m -s /bin/bash "$USERNAME"
-        passwd -l "$USERNAME" >/dev/null   # no password login; key only
-    fi
+    useradd -m -s /bin/bash "$USERNAME"
+    passwd -l "$USERNAME" >/dev/null   # no password login; key only
 fi
 usermod -aG "$SUDO_GROUP" "$USERNAME"
 
+# Make sure sudo is installed (minimal images may lack it)
+if ! command -v sudo &>/dev/null; then
+    if [[ $FAMILY == debian ]]; then
+        apt-get update -y && apt-get install -y sudo
+    else
+        dnf install -y sudo
+    fi
+fi
+
 if [[ $SUDO_NOPASSWD == yes ]]; then
+    mkdir -p /etc/sudoers.d
     SUDOERS_FILE="/etc/sudoers.d/90-$USERNAME"
     echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" > "$SUDOERS_FILE"
     chmod 440 "$SUDOERS_FILE"
@@ -81,11 +87,7 @@ if [[ $FAMILY == debian ]]; then
     if ! command -v ufw &>/dev/null; then
         apt-get update -y && apt-get install -y ufw
     fi
-    if [[ $SSH_PORT == 22 ]]; then
-        ufw allow OpenSSH
-    else
-        ufw allow "${SSH_PORT}/tcp"
-    fi
+    ufw allow "${SSH_PORT}/tcp"
     ufw --force enable
 else
     if ! command -v firewall-cmd &>/dev/null; then
