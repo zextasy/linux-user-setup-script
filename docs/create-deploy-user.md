@@ -55,6 +55,8 @@ bash create-deploy-user.sh
 
 ## 2. Add the values to GitHub
 
+All GitHub names use the `VPS_` prefix. (The input variables above, like `SSH_HOST`, only configure the script; they are not GitHub names.)
+
 The script output lists each value. In your repository go to
 **Settings > Secrets and variables > Actions**.
 
@@ -62,27 +64,27 @@ The script output lists each value. In your repository go to
 
 | Name              | Contents |
 |-------------------|----------|
-| `SSH_HOST`        | Server hostname or IP |
-| `SSH_KNOWN_HOSTS` | The server's host-key line (`[host]:port ssh-ed25519 AAAA...`) |
-| `SSH_PRIVATE_KEY` | The full private key, including the `BEGIN`/`END` lines |
+| `VPS_SSH_HOST`        | Server hostname or IP |
+| `VPS_SSH_KNOWN_HOSTS` | The server's host-key line (`[host]:port ssh-ed25519 AAAA...`) |
+| `VPS_SSH_PRIVATE_KEY` | The full private key, including the `BEGIN`/`END` lines |
 
 **Variables** (the *Variables* tab):
 
 | Name          | Contents |
 |---------------|----------|
-| `SSH_USER`    | `deploy` (or your `DEPLOY_USER`) |
-| `SSH_PORT`    | sshd port |
-| `DEPLOY_PATH` | Directory the user owns |
+| `VPS_SSH_USER`    | `deploy` (or your `DEPLOY_USER`) |
+| `VPS_SSH_PORT`    | sshd port |
+| `VPS_DEPLOY_PATH` | Directory the user owns |
 
 Or with the GitHub CLI from your own machine (copy the key into a local file first):
 
 ```bash
-gh secret set SSH_PRIVATE_KEY < private_key_file
-gh secret set SSH_HOST --body "deploy.example.com"
-gh secret set SSH_KNOWN_HOSTS < known_hosts_file
-gh variable set SSH_USER --body "deploy"
-gh variable set SSH_PORT --body "22"
-gh variable set DEPLOY_PATH --body "/srv/apps"
+gh secret set VPS_SSH_PRIVATE_KEY < private_key_file
+gh secret set VPS_SSH_HOST --body "deploy.example.com"
+gh secret set VPS_SSH_KNOWN_HOSTS < known_hosts_file
+gh variable set VPS_SSH_USER --body "deploy"
+gh variable set VPS_SSH_PORT --body "22"
+gh variable set VPS_DEPLOY_PATH --body "/srv/apps"
 ```
 
 ## 3. Delete the secrets file
@@ -105,14 +107,14 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          echo "${{ secrets.VPS_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       - name: Deploy
         run: |
-          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p ${{ vars.SSH_PORT }}" \
-            ./ ${{ vars.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ vars.DEPLOY_PATH }}/
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p ${{ vars.VPS_SSH_PORT }}" \
+            ./ ${{ vars.VPS_SSH_USER }}@${{ secrets.VPS_SSH_HOST }}:${{ vars.VPS_DEPLOY_PATH }}/
 ```
 
 The key is restricted, so the workflow can run commands and copy files, but cannot tunnel ports.
@@ -120,7 +122,7 @@ The key is restricted, so the workflow can run commands and copy files, but cann
 ## Rotating the key
 
 Run the script again. It replaces the old key in `authorized_keys` and writes a new secrets file. Update
-`SSH_PRIVATE_KEY` (and `SSH_KNOWN_HOSTS` if the host key changed) in GitHub, then delete the file.
+`VPS_SSH_PRIVATE_KEY` (and `VPS_SSH_KNOWN_HOSTS` if the host key changed) in GitHub, then delete the file.
 
 ## Security notes
 
@@ -131,9 +133,9 @@ Run the script again. It replaces the old key in `authorized_keys` and writes a 
 
 ## Troubleshooting
 
-- **`Permission denied (publickey)`**: confirm `SSH_PRIVATE_KEY` was pasted completely (including the trailing newline), and that `~deploy/.ssh` is `700` and `authorized_keys` is `600`, owned by `deploy`. On SELinux systems run `restorecon -R ~deploy/.ssh`.
-- **`Host key verification failed`**: `SSH_KNOWN_HOSTS` must match the host and port GitHub connects to (`[host]:port` when the port isn't 22). Regenerate with `ssh-keyscan -p <port> <host>`.
-- **`sshd not found` / `host_ed25519_key.pub not found`**: install and start OpenSSH (`openssh-server`, or `openssh` on Arch/SUSE/Alpine) and re-run; until then fill in `SSH_KNOWN_HOSTS` with `ssh-keyscan`.
+- **`Permission denied (publickey)`**: confirm `VPS_SSH_PRIVATE_KEY` was pasted completely (including the trailing newline), and that `~deploy/.ssh` is `700` and `authorized_keys` is `600`, owned by `deploy`. On SELinux systems run `restorecon -R ~deploy/.ssh`.
+- **`Host key verification failed`**: `VPS_SSH_KNOWN_HOSTS` must match the host and port GitHub connects to (`[host]:port` when the port isn't 22). Regenerate with `ssh-keyscan -p <port> <host>`.
+- **`sshd not found` / `host_ed25519_key.pub not found`**: install and start OpenSSH (`openssh-server`, or `openssh` on Arch/SUSE/Alpine) and re-run; until then fill in `VPS_SSH_KNOWN_HOSTS` with `ssh-keyscan`.
 - **Wrong `SSH_HOST`**: the auto-detected IP may be a NAT or proxy address. Re-run with `SSH_HOST=...`.
 - **`docker group not found`**: install Docker, then `sudo usermod -aG docker deploy`.
 - **Firewall**: the script does not open ports. Make sure sshd's port is allowed (see `user-initial-setup.sh`).
