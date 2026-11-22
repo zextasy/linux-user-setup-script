@@ -1,17 +1,34 @@
 # linux-user-setup-script
 
-Initial server setup script that works on most popular Linux distros. It:
+Two bash scripts for setting up a fresh Linux server with SSH key access. They work on the popular
+distro families and use the distro's own package manager and firewall.
 
-- creates a non-root user with a locked password (key-only login) and adds it to the admin group (`sudo` on Debian/Ubuntu, `wheel` elsewhere)
-- installs your SSH public key (and fixes SELinux contexts where applicable)
-- enables a firewall allowing SSH: `ufw` on Debian/Ubuntu, Arch and Alpine; `firewalld` on RHEL-family and SUSE
-- installs any missing prerequisites (`sudo`, `ufw`/`firewalld`, `useradd` tooling) with the distro's package manager
+| Script | Purpose | Instructions |
+|---|---|---|
+| [`user-initial-setup.sh`](user-initial-setup.sh) | Creates **your admin user**: a non-root user with `sudo`, your SSH public key, and a firewall that allows SSH. Run once on a new server. | [docs/user-initial-setup.md](docs/user-initial-setup.md) |
+| [`create-deploy-user.sh`](create-deploy-user.sh) | Creates a locked-down **`deploy` user for GitHub Actions**: a dedicated SSH key, then prints and saves every GitHub secret and variable your workflow needs. | [docs/create-deploy-user.md](docs/create-deploy-user.md) |
 
-The script is idempotent: re-running it won't duplicate keys or fail on an existing user.
+## Typical order
+
+1. On a new server, as root, run **`user-initial-setup.sh`** to create your own admin user and enable the firewall.
+2. Log in as that user, then run **`create-deploy-user.sh`** (with `sudo`) to set up the account GitHub Actions deploys with.
+3. Copy the printed secrets and variables into your GitHub repository, then delete the secrets file from the server.
+
+## Quick start
+
+```bash
+# 1. Your admin user (as root)
+USERNAME=sammy PUBLIC_KEY="ssh-ed25519 AAAA... you@example.com" bash user-initial-setup.sh
+
+# 2. The GitHub Actions deploy user (as root, or with sudo)
+SSH_HOST=deploy.example.com bash create-deploy-user.sh
+```
+
+Both scripts need to be run as root and are safe to re-run. See the instructions files for all options.
 
 ## Supported distros
 
-| Family | Distros | Package manager | Firewall |
+| Family | Distros | Package manager | Firewall (`user-initial-setup.sh`) |
 |---|---|---|---|
 | Debian | Debian, Ubuntu, Mint, Pop!_OS, Raspberry Pi OS | `apt` | `ufw` |
 | RHEL | RHEL, Rocky, AlmaLinux, CentOS Stream, Oracle Linux, Fedora, Amazon Linux | `dnf` / `yum` | `firewalld` |
@@ -19,90 +36,15 @@ The script is idempotent: re-running it won't duplicate keys or fail on an exist
 | Arch | Arch, Manjaro, EndeavourOS | `pacman` | `ufw` |
 | Alpine | Alpine | `apk` | `ufw` |
 
-Detection uses `/etc/os-release` (`ID` / `ID_LIKE`), so derivatives are picked up automatically.
-The script needs **bash**; on Alpine run `apk add bash` first.
+Distros are detected from `/etc/os-release` (`ID` / `ID_LIKE`), so derivatives work automatically.
+The scripts need **bash**; on Alpine run `apk add bash` first.
 
-## 1. Create an SSH key (on your local machine)
+## Security notes
 
-```bash
-ssh-keygen -t ed25519 -C "you@example.com"
-```
+- Both users have password login disabled; access is by SSH key only.
+- `create-deploy-user.sh` writes a **private key** to a root-only file. Copy it into GitHub and delete the file.
+- The deploy user has no sudo unless you opt in, and its key cannot forward ports.
 
-Accept the default path (`~/.ssh/id_ed25519`) and set a passphrase. Print the public key:
+## Testing
 
-```bash
-cat ~/.ssh/id_ed25519.pub
-```
-
-Never share the private key (`id_ed25519` without `.pub`).
-
-## 2. Run the script (on the server, as root)
-
-Copy it over and run it, passing the username and public key:
-
-```bash
-scp user-initial-setup.sh root@<server-ip>:/root/
-ssh root@<server-ip>
-```
-
-```bash
-USERNAME=sammy PUBLIC_KEY="ssh-ed25519 AAAA... you@example.com" bash user-initial-setup.sh
-```
-
-Optional variables:
-
-| Variable        | Default | Description                                                        |
-|-----------------|---------|--------------------------------------------------------------------|
-| `USERNAME`      | `sammy` | User to create                                                     |
-| `PUBLIC_KEY`    | (none)  | Public key to authorize (required)                                 |
-| `SSH_PORT`      | `22`    | SSH port to allow through the firewall (and SELinux on RHEL)       |
-| `SUDO_NOPASSWD` | `yes`   | The user has no password, so sudo is passwordless. Use `no` and run `passwd <user>` if you prefer a password. |
-| `SKIP_FIREWALL` | `no`    | Set to `yes` to leave the firewall untouched                       |
-
-## 3. Log in as the new user
-
-**Keep your root session open** and test from a second terminal:
-
-```bash
-ssh sammy@<server-ip>
-# custom port / specific key:
-ssh -i ~/.ssh/id_ed25519 -p 2222 sammy@<server-ip>
-```
-
-Optionally add a shortcut to `~/.ssh/config` on your local machine:
-
-```
-Host myserver
-    HostName <server-ip>
-    User sammy
-    IdentityFile ~/.ssh/id_ed25519
-```
-
-Then connect with `ssh myserver`.
-
-## 4. (Recommended) Harden SSH
-
-Once key login works, disable root and password logins. Edit `/etc/ssh/sshd_config`
-(or a file in `/etc/ssh/sshd_config.d/`):
-
-```
-PermitRootLogin no
-PasswordAuthentication no
-```
-
-Validate and reload (the service is `ssh` on Debian/Ubuntu, `sshd` elsewhere):
-
-```bash
-sudo sshd -t
-sudo systemctl reload ssh     # Debian/Ubuntu
-sudo systemctl reload sshd    # RHEL, SUSE, Arch
-sudo rc-service sshd reload   # Alpine
-```
-
-## Troubleshooting
-
-- **Permission denied (publickey)**: check `~/.ssh` is `700`, `authorized_keys` is `600`, and both are owned by the user. On RHEL run `restorecon -R ~/.ssh`.
-- **Locked out after firewall change**: use your provider's web console; make sure `SSH_PORT` matches your sshd port.
-- **Custom port on RHEL (SELinux enforcing)**: the script runs `semanage port` for you; if it is missing, install `policycoreutils-python-utils`.
-- **"sshd not found" warning**: install and enable OpenSSH (`openssh-server`, or `openssh` on Arch/SUSE/Alpine) before logging out.
-- **Firewall not started warning** (containers, or no init system): the rules are written but take effect when the firewall service starts.
+Both scripts were tested in containers (Ubuntu, Debian, Rocky, Alma, Fedora, Amazon Linux, openSUSE, Arch, Alpine) with real package installs. `create-deploy-user.sh` was verified with a real SSH login on all of them; `user-initial-setup.sh` on Ubuntu, Alma and Alpine. Not covered: real systemd hosts (starting firewall services), SELinux enforcement, and live GitHub Actions runs. Run on a throwaway VM before relying on them in production.
