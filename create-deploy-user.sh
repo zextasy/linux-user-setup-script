@@ -155,7 +155,7 @@ if [[ -r $HOST_KEY_FILE ]]; then
     HK="$(awk '{print $1" "$2}' "$HOST_KEY_FILE")"
     if [[ $SSH_PORT == 22 ]]; then KNOWN_HOSTS="$SSH_HOST $HK"; else KNOWN_HOSTS="[$SSH_HOST]:$SSH_PORT $HK"; fi
 else
-    warn "$HOST_KEY_FILE not found (is openssh-server installed?). Fill in SSH_KNOWN_HOSTS with: ssh-keyscan -p $SSH_PORT $SSH_HOST"
+    warn "$HOST_KEY_FILE not found (is openssh-server installed?). Fill in VPS_SSH_KNOWN_HOSTS with: ssh-keyscan -p $SSH_PORT $SSH_HOST"
 fi
 command -v sshd &>/dev/null || [[ -x /usr/sbin/sshd ]] \
     || warn "sshd not found; install and enable openssh-server so GitHub can connect."
@@ -175,26 +175,26 @@ Copy the values into GitHub, then delete this file from the server:
 REPOSITORY SECRETS   (Settings > Secrets and variables > Actions > Secrets)
 ========================================================================
 
-SSH_HOST:
+VPS_SSH_HOST:
 ${SSH_HOST}
 
-SSH_KNOWN_HOSTS:
+VPS_SSH_KNOWN_HOSTS:
 ${KNOWN_HOSTS}
 
-SSH_PRIVATE_KEY:
+VPS_SSH_PRIVATE_KEY:
 $(cat "$TMP_DIR/key")
 
 ========================================================================
 REPOSITORY VARIABLES (Settings > Secrets and variables > Actions > Variables)
 ========================================================================
 
-SSH_USER:
+VPS_SSH_USER:
 ${DEPLOY_USER}
 
-SSH_PORT:
+VPS_SSH_PORT:
 ${SSH_PORT}
 
-DEPLOY_PATH:
+VPS_DEPLOY_PATH:
 ${DEPLOY_PATH}
 
 ========================================================================
@@ -204,18 +204,18 @@ EXAMPLE WORKFLOW STEP
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "\${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          echo "\${{ secrets.VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          echo "\${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          echo "\${{ secrets.VPS_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       - name: Deploy
         run: |
-          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p \${{ vars.SSH_PORT }}" \\
-            ./ \${{ vars.SSH_USER }}@\${{ secrets.SSH_HOST }}:\${{ vars.DEPLOY_PATH }}/
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p \${{ vars.VPS_SSH_PORT }}" \\
+            ./ \${{ vars.VPS_SSH_USER }}@\${{ secrets.VPS_SSH_HOST }}:\${{ vars.VPS_DEPLOY_PATH }}/
 
 With the GitHub CLI you can also set them from your machine, e.g.:
-  gh secret set SSH_PRIVATE_KEY < private_key_file
-  gh variable set SSH_USER --body "${DEPLOY_USER}"
+  gh secret set VPS_SSH_PRIVATE_KEY < private_key_file
+  gh variable set VPS_SSH_USER --body "${DEPLOY_USER}"
 TXT
 } > "$OUTPUT_FILE"
 chmod 600 "$OUTPUT_FILE"
