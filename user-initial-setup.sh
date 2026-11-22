@@ -97,7 +97,7 @@ if id "$USERNAME" &>/dev/null; then
     echo "User $USERNAME already exists, skipping creation."
 else
     useradd -m -s /bin/bash "$USERNAME" 2>/dev/null || useradd -m "$USERNAME"
-    usermod -L "$USERNAME"   # lock password; key-only login
+    usermod -p '*' "$USERNAME"   # disable password login but keep key login working (usermod -L breaks sshd without PAM, e.g. Alpine)
 fi
 getent group "$SUDO_GROUP" >/dev/null || groupadd "$SUDO_GROUP"
 usermod -aG "$SUDO_GROUP" "$USERNAME"

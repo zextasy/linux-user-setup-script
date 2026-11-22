@@ -90,7 +90,7 @@ if id "$DEPLOY_USER" &>/dev/null; then
     echo "User $DEPLOY_USER already exists; rotating its GitHub Actions key."
 else
     useradd -m -s /bin/bash "$DEPLOY_USER" 2>/dev/null || useradd -m "$DEPLOY_USER"
-    usermod -L "$DEPLOY_USER"   # lock password; key-only login
+    usermod -p '*' "$DEPLOY_USER"   # disable password login but keep key login working (usermod -L breaks sshd without PAM, e.g. Alpine)
 fi
 HOME_DIR="$(getent passwd "$DEPLOY_USER" | cut -d: -f6)"
 GROUP_NAME="$(id -gn "$DEPLOY_USER")"
